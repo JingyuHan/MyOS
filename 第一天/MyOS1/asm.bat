@@ -1,0 +1,1 @@
+..\..\tolset\z_tools\nask.exe MyOS.nas MyOS.img
