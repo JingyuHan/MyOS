@@ -15,6 +15,7 @@ void console_task(struct SHEET *sheet, unsigned int memtotal)
 	cons.cur_x =  8;
 	cons.cur_y = 28;
 	cons.cur_c = -1;
+	*((int *) 0x0fec) = (int) &cons;
 	
 	fifo32_init(&task->fifo, 128, fifobuf, task);
 
@@ -77,7 +78,7 @@ void console_task(struct SHEET *sheet, unsigned int memtotal)
 					cons_putchar(&cons, '>', 1);
 				} else {
 					/* 一般字符 */
-					if (cons.cur_x < 240) {
+					if (cons.cur_x < sheet->bxsize - 24) {
 						/* 显示一个字符，光标后移一位 */
 						cmdline[cons.cur_x / 8 - 2] = i - 256;
 						cons_putchar(&cons , i-256 , 1);
@@ -97,13 +98,18 @@ void cons_putchar(struct CONSOLE *cons, int chr, char move){
 	char s[2];
 	s[0] = chr;
 	s[1] = 0;
+	/*判定是否需要换行
+	  用24是因为：前后各有像素边框，然后光标占一个像素
+					字符要在此处结束
+	*/
+	if (cons->cur_x >= cons->sht->bxsize - 24) {
+		cons_newline(cons);
+	}
 	if (s[0] == 0x09) {	/* Tab */
 		for (;;) {
 			putfonts8_asc_sht(cons->sht, cons->cur_x, cons->cur_y, 7, 0, " ", 1);
 			cons->cur_x += 8;
-			if (cons->cur_x == 8 + 240) {
-				cons_newline(cons);
-			}
+			
 			if (((cons->cur_x - 8) & 0x1f) == 0) {
 				break;	/* 被32整除则break */
 			}
@@ -113,11 +119,12 @@ void cons_putchar(struct CONSOLE *cons, int chr, char move){
 	} else if (s[0] == 0x0d) {	/* 回车 */
 		/* 暂不做处理 */
 	} else {	/* 一般字符 */
+		
 		putfonts8_asc_sht(cons->sht, cons->cur_x, cons->cur_y, 7, 0, s, 1);
 		if (move != 0) {
 			/* move为0时光标不后移 */
 			cons->cur_x += 8;
-			if (cons->cur_x == 8 + 240) {
+			if (cons->cur_x >= cons->sht->bxsize - 24) {
 				cons_newline(cons);
 			}
 		}
@@ -134,19 +141,36 @@ void cons_newline(struct CONSOLE *cons)
 	} else {
 		/* 滚动 */
 		for (y = 28; y < sheet->bysize-33; y++) {
-			for (x = 8; x < 8 + 240; x++) {
+			for (x = 8; x < sheet->bxsize-8; x++) {
 				sheet->buf[x + y * sheet->bxsize] = sheet->buf[x + (y + 16) * sheet->bxsize];
 			}
 		}
 		for (y = sheet->bysize-33; y < sheet->bysize-17; y++) {
-			for (x = 8; x < 8 + 240; x++) {
+			for (x = 8; x < sheet->bxsize - 8; x++) {
 				sheet->buf[x + y * sheet->bxsize] = 0;
 			}
 		}
-		sheet_refresh(sheet, 8, 28, 8 + 240, sheet->bysize-17);
+		sheet_refresh(sheet, 8, 28, sheet->bxsize-8, sheet->bysize-17);
 	}
 	cons->cur_x = 8;
 	return ;
+}
+
+void cons_putstr0(struct CONSOLE *cons, char *s)
+{
+	for (; *s != 0; s++) {
+		cons_putchar(cons, *s, 1);
+	}
+	return;
+}
+
+void cons_putstr1(struct CONSOLE *cons, char *s, int l)
+{
+	int i;
+	for (i = 0; i < l; i++) {
+		cons_putchar(cons, s[i], 1);
+	}
+	return;
 }
 
 void cons_runcmd(char *cmdline, struct CONSOLE *cons, int *fat, unsigned int memtotal)
@@ -159,27 +183,22 @@ void cons_runcmd(char *cmdline, struct CONSOLE *cons, int *fat, unsigned int mem
 		cmd_ls(cons);
 	} else if (strncmp(cmdline, "cat ", 4) == 0) {
 		cmd_cat(cons, fat, cmdline);
-	} else if (strcmp(cmdline, "hlt") == 0) {
-		cmd_hlt(cons, fat);
 	} else if (cmdline[0] != 0) {
-		/* 不是命令，也不是空行 */
-		putfonts8_asc_sht(cons->sht, 8, cons->cur_y, 7, 0, "No such command.", 16);
-		cons_newline(cons);
-		cons_newline(cons);
+		
+		if(cmd_app(cons, fat, cmdline) == 0){
+			/* 不是命令，也不是空行 */
+			cons_putstr0(cons, "No Such command.\n\n");
+		}
+		
 	}
 	return;
 }
 
 void cmd_mem(struct CONSOLE *cons, unsigned int memtotal){
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
-	char s[30];
-	sprintf(s, "total   %dMB", memtotal / (1024 * 1024));
-	putfonts8_asc_sht(cons->sht, 8, cons->cur_y, 7, 0, s, 30);
-	cons_newline(cons);
-	sprintf(s, "free %dKB", memman_total(memman) / 1024);
-	putfonts8_asc_sht(cons->sht, 8, cons->cur_y, 7, 0, s, 30);
-	cons_newline(cons);
-	cons_newline(cons);
+	char s[60];
+	sprintf(s, "total   %dMB\nfree %dKB\n\n", memtotal / (1024 * 1024), memman_total(memman) / 1024);
+	cons_putstr0(cons, s);
 	return;
 }
 
@@ -187,11 +206,11 @@ void cmd_cls(struct CONSOLE *cons){
 	int x, y;
 	struct SHEET *sheet = cons->sht;
 	for (y = 28; y < sheet->bysize-9; y++) {
-		for (x = 8; x < 8 + 240; x++) {
+		for (x = 8; x < sheet->bxsize-8; x++) {
 			sheet->buf[x + y * sheet->bxsize] = 0;
 		}
 	}
-	sheet_refresh(sheet, 8, 28, 8 + 240, sheet->bysize-9 );
+	sheet_refresh(sheet, 8, 28, sheet->bxsize-8, sheet->bysize-9 );
 	cons->cur_y = 28;
 }
 
@@ -205,15 +224,14 @@ void cmd_ls(struct CONSOLE *cons){
 		}
 		if (finfo[i].name[0] != 0xe5) {
 			if ((finfo[i].type & 0x18) == 0) {
-				sprintf(s, "filename.ext   %7d", finfo[i].size);
+				sprintf(s, "filename.ext   %7d\n", finfo[i].size);
 				for (j = 0; j < 8; j++) {
 					s[j] = finfo[i].name[j];
 				}
 				s[ 9] = finfo[i].ext[0];
 				s[10] = finfo[i].ext[1];
 				s[11] = finfo[i].ext[2];
-				putfonts8_asc_sht(cons->sht, 8, cons->cur_y, 7, 0, s, 30);
-				cons_newline(cons);
+				cons_putstr0(cons, s);
 			}
 		}
 	}
@@ -225,42 +243,74 @@ void cmd_cat(struct CONSOLE *cons, int *fat, char *cmdline){
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
 	struct FILEINFO *finfo = file_search(cmdline + 4, (struct FILEINFO *) (ADR_DISKIMG + 0x002600), 224);
 	char *p;
-	int i;
 	if (finfo != 0) {
 		/* 找到文件的情况 */
 		p = (char *) memman_alloc_4k(memman, finfo->size);
 		file_loadfile(finfo->clustno, finfo->size, p, fat, (char *) (ADR_DISKIMG + 0x003e00));
-		for (i = 0; i < finfo->size; i++) {
-			cons_putchar(cons, p[i], 1);
-		}
+		cons_putstr1(cons, p, finfo->size);
 		memman_free_4k(memman, (int) p, finfo->size);
 	} else {
 		/* 没有找到文件的情况 */
-		putfonts8_asc_sht(cons->sht, 8, cons->cur_y, 7, 0, "File not found.", 15);
-		cons_newline(cons);
+		cons_putstr0(cons, "File not found.\n");
 	}
 	cons_newline(cons);
 	return;
 }
 
-void cmd_hlt(struct CONSOLE *cons, int *fat){
+int cmd_app(struct CONSOLE *cons, int *fat, char *cmdline)
+{
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
-	struct FILEINFO *finfo = file_search("HLT.HRB", (struct FILEINFO *) (ADR_DISKIMG + 0x002600), 224);
+	struct FILEINFO *finfo;
 	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *) ADR_GDT;
-	char *p;
-	
+	char name[18], *p;
+	int i;
+
+	/* 根据命令行生成文件名 */
+	for (i = 0; i < 13; i++) {
+		if (cmdline[i] <= ' ') {
+			break;
+		}
+		name[i] = cmdline[i];
+	}
+	name[i] = 0; /* 暂且将文件名的后面置为0 */
+
+	/* 寻找文件 */
+	finfo = file_search(name, (struct FILEINFO *) (ADR_DISKIMG + 0x002600), 224);
+	if (finfo == 0 && name[i - 1] != '.') {
+		/* 若未找到，文件名后面加上.hrb重新查找 */
+		name[i    ] = '.';
+		name[i + 1] = 'H';
+		name[i + 2] = 'R';
+		name[i + 3] = 'B';
+		name[i + 4] = 0;
+		finfo = file_search(name, (struct FILEINFO *) (ADR_DISKIMG + 0x002600), 224);
+	}
+
 	if (finfo != 0) {
 		/* 找到文件的情况 */
 		p = (char *) memman_alloc_4k(memman, finfo->size);
+		*((int *) 0xfe8) = (int) p;
 		file_loadfile(finfo->clustno, finfo->size, p, fat, (char *) (ADR_DISKIMG + 0x003e00));
 		set_segmdesc(gdt + 1003, finfo->size - 1, (int) p, AR_CODE32_ER);
-		farjmp(0, 1003 * 8);
+		farcall(0, 1003 * 8);
 		memman_free_4k(memman, (int) p, finfo->size);
-	} else {
-		/* 没有找到文件的情况 */
-		putfonts8_asc_sht(cons->sht, 8, cons->cur_y, 7, 0, "File not found.", 15);
 		cons_newline(cons);
+		return 1;
 	}
-	cons_newline(cons);
+	/* 没有找到文件的情况 */
+	return 0;
+}
+
+void hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax)
+{
+	int cs_base = *((int *) 0xfe8);
+	struct CONSOLE *cons = (struct CONSOLE *) *((int *) 0x0fec);
+	if (edx == 1) {
+		cons_putchar(cons, eax & 0xff, 1);
+	} else if (edx == 2) {
+		cons_putstr0(cons, (char *) ebx + cs_base);
+	} else if (edx == 3) {
+		cons_putstr1(cons, (char *) ebx + cs_base, ecx);
+	}
 	return;
 }
