@@ -50,5 +50,7 @@
 
 　　第一次运行hello4时，因为没有复制应用程序数据段，作者是没有输出，而我的是输出了乱码![](MyOS7.jpg)<br><br>
 　　修改console.c后，正常了，但是汇编文件编译出来的hello和hello2没有经过bim2hrb编译，所以就不能正常运行了。而bug系列也是c编译而来所以正常。往后汇编文件也需要先编译为bim文件，通过bim2hrb来编译。
-![](MyOS8.jpg)
+![](MyOS8.jpg)<br><br>
+　　继续完成窗口创建方面的API!![](MyOS9.jpg)
+
 
