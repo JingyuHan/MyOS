@@ -4,4 +4,5 @@
 ![](MyOS1.jpg)
 ![](MyOS2.jpg)
 ![](MyOS3.jpg)
-![](MyOS4.jpg)
+![](MyOS4.jpg)<br><br>
+　　还对窗口的刷新和关闭进行了优化。
