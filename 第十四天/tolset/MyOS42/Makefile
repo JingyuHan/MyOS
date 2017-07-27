@@ -202,7 +202,7 @@ clean :
 	-$(DEL) *.map
 	-$(DEL) *.bim
 	-$(DEL) *.hrb
-	-$(DEL) haribote.sys
+	-$(DEL) MyOS.sys
 
 src_only :
 	$(MAKE) clean
