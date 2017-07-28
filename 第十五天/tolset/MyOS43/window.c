@@ -68,7 +68,7 @@ void make_wtitle8(unsigned char *buf, int xsize, char *title, char act){
 			} else if (c == '$') {
 				c = 15;
 			} else if (c == 'Q') {
-				c = 99;
+				c = 7;
 			} else {
 				c = 7;
 			}
@@ -83,7 +83,7 @@ void make_wtitle8(unsigned char *buf, int xsize, char *title, char act){
 			} else if (c == '$') {
 				c = 15;
 			} else if (c == 'Q') {
-				c=99;
+				c=7;
 			} else {
 				c = 7;
 			}
