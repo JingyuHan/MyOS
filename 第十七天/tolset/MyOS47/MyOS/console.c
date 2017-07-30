@@ -346,7 +346,7 @@ int cmd_app(struct CONSOLE *cons, int *fat, char *cmdline)
 {
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
 	struct FILEINFO *finfo;
-	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *) ADR_GDT;
+
 	char name[18], *p, *q;
 	struct TASK *task = task_now();
 	int i, segsiz, datsiz, esp, dathrb;
@@ -419,6 +419,7 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int 
 	struct CONSOLE *cons = task->cons;
 	struct SHTCTL *shtctl = (struct SHTCTL *) *((int *) 0x0fe4);
 	struct SHEET *sht;
+	struct FIFO32 *sys_fifo = (struct FIFO32 *) *((int *) 0x0fec);
 	int *reg = &eax + 1;	/* EAX后面的地址 */
 		/* 强行改写通过PASHAD保存的值 */
 		/* reg[0] : EDI,   reg[1] : ESI,   reg[2] : EBP,   reg[3] : ESP */
@@ -506,7 +507,14 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int 
 			if (i == 3) {	/* 光标OFF */
 				cons->cur_c = -1;
 			}
-			if (256 <= i && i <= 511) { /* 键盘数据（通过任务A） */
+			if (i == 4) {	/* コンソールだけを閉じる */
+				timer_cancel(cons->timer);
+				io_cli();
+				fifo32_put(sys_fifo, cons->sht - shtctl->sheets0 + 2024);	/* 2024～2279 */
+				cons->sht = 0;
+				io_sti();
+			}
+			if (256 <= i ) { /* 键盘数据（通过任务A） */
 				reg[7] = i - 256;
 				return 0;
 			}
