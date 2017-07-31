@@ -203,15 +203,18 @@ struct TASK {
 	struct SEGMENT_DESCRIPTOR ldt[2];
 	struct CONSOLE *cons;
 	int ds_base, cons_stack;
+	struct FILEHANDLE *fhandle;
+	int *fat;
+	char *cmdline;
 };
 struct TASKLEVEL {
-	int running; /* 正在运行的任务数量 */
-	int now; /* 当前正在运行的任务 */
+	int running; 	/* 正在运行的任务数量 */
+	int now;	 /* 当前正在运行的任务 */
 	struct TASK *tasks[MAX_TASKS_LV];
 };
 struct TASKCTL {
-	int now_lv; /* 当前活动中的level */
-	char lv_change; /* 在下次任务切换时是否需要改变level */
+	int now_lv;	 	/* 当前活动中的level */
+	char lv_change; 	/* 在下次任务切换时是否需要改变level */
 	struct TASKLEVEL level[MAX_TASKLEVELS];
 	struct TASK tasks0[MAX_TASKS];
 };
@@ -238,6 +241,11 @@ struct CONSOLE {
 	int cur_x, cur_y, cur_c;
 	struct TIMER *timer;
 };
+struct FILEHANDLE {
+	char *buf;
+	int size;
+	int pos;
+};
 void console_task(struct SHEET *sheet, int memtotal);
 void cons_putchar(struct CONSOLE *cons, int chr, char move);
 void cons_newline(struct CONSOLE *cons);
@@ -247,7 +255,6 @@ void cons_runcmd(char *cmdline, struct CONSOLE *cons, int *fat, int memtotal);
 void cmd_mem(struct CONSOLE *cons, int memtotal);
 void cmd_cls(struct CONSOLE *cons);
 void cmd_ls(struct CONSOLE *cons);
-void cmd_cat(struct CONSOLE *cons, int *fat, char *cmdline);
 void cmd_exit(struct CONSOLE *cons, int *fat);
 void cmd_start(struct CONSOLE *cons, char *cmdline, int memtotal);
 void cmd_ncst(struct CONSOLE *cons, char *cmdline, int memtotal);

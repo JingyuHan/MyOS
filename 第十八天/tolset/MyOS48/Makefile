@@ -19,8 +19,9 @@ MyOS.img : MyOS/ipl.bin MyOS/MyOS.sys Makefile \
 		winhelo2/winhelo2.hrb winhelo3/winhelo3.hrb \
 		star1/star1.hrb stars/stars.hrb stars2/stars2.hrb \
 		lines/lines.hrb walk/walk.hrb noodle/noodle.hrb \
-		beepdown/beepdown.hrb color/color.hrb color2/color2.hrb\
-		sosu/sosu.hrb sosu2/sosu2.hrb sosu3/sosu3.hrb
+		beepdown/beepdown.hrb color/color.hrb color2/color2.hrb \
+		sosu/sosu.hrb sosu2/sosu2.hrb sosu3/sosu3.hrb \
+		typeipl/typeipl.hrb cat/cat.hrb
 	$(EDIMG)   imgin:../z_tools/fdimg0at.tek \
 		wbinimg src:MyOS/ipl.bin len:512 from:0 to:0 \
 		copy from:MyOS/MyOS.sys to:@: \
@@ -44,6 +45,8 @@ MyOS.img : MyOS/ipl.bin MyOS/MyOS.sys Makefile \
 		copy from:sosu/sosu.hrb to:@: \
 		copy from:sosu2/sosu2.hrb to:@: \
 		copy from:sosu3/sosu3.hrb to:@: \
+		copy from:typeipl/typeipl.hrb to:@: \
+		copy from:cat/cat.hrb to:@: \
 		imgout:MyOS.img
 
 # 添加命令
@@ -70,6 +73,8 @@ full :
 	$(MAKE) -C sosu
 	$(MAKE) -C sosu2
 	$(MAKE) -C sosu3
+	$(MAKE) -C typeipl
+	$(MAKE) -C cat
 	$(MAKE) MyOS.img
 
 
@@ -99,6 +104,11 @@ clean_full :
 	$(MAKE) -C beepdown		clean
 	$(MAKE) -C color		clean
 	$(MAKE) -C color2		clean
+	$(MAKE) -C sosu			clean
+	$(MAKE) -C sosu2		clean
+	$(MAKE) -C sosu3		clean
+	$(MAKE) -C typeipl		clean
+	$(MAKE) -C cat		clean
 
 src_only_full :
 	$(MAKE) -C MyOS			src_only
@@ -118,6 +128,11 @@ src_only_full :
 	$(MAKE) -C beepdown		src_only
 	$(MAKE) -C color		src_only
 	$(MAKE) -C color2		src_only
+	$(MAKE) -C sosu			src_only
+	$(MAKE) -C sosu2		src_only
+	$(MAKE) -C sosu3		src_only
+	$(MAKE) -C typeipl		src_only
+	$(MAKE) -C cat		src_only
 	-$(DEL) MyOS.img
 
 refresh :

@@ -10,12 +10,14 @@ void console_task(struct SHEET *sheet, int memtotal)
 	int i,  *fat = (int *) memman_alloc_4k(memman, 4 * 2880);
 	char cmdline[30];
 	struct CONSOLE cons;
+	struct FILEHANDLE fhandle[8];
 	
 	cons.sht = sheet;
 	cons.cur_x =  8;
 	cons.cur_y = 28;
 	cons.cur_c = -1;
 	task->cons = &cons;
+	task->cmdline = cmdline;
 
 	if (cons.sht != 0) {
 		cons.timer = timer_alloc();
@@ -23,6 +25,11 @@ void console_task(struct SHEET *sheet, int memtotal)
 		timer_settime(cons.timer, 50);
 	}
 	file_readfat(fat, (unsigned char *) (ADR_DISKIMG + 0x000200));
+	for (i = 0; i < 8; i++) {
+		fhandle[i].buf = 0;	/* 未使用标记 */
+	}
+	task->fhandle = fhandle;
+	task->fat = fat;
 
 	//显示提示符
 	cons_putchar(&cons,'>',1);
@@ -197,8 +204,6 @@ void cons_runcmd(char *cmdline, struct CONSOLE *cons, int *fat, int memtotal)
 		cmd_cls(cons);
 	} else if (strcmp(cmdline, "ls") == 0 && cons->sht != 0) {
 		cmd_ls(cons);
-	} else if (strncmp(cmdline, "cat ", 4) == 0 && cons->sht != 0) {
-		cmd_cat(cons, fat, cmdline);
 	}else if (strcmp(cmdline, "exit") == 0) {
 		cmd_exit(cons, fat);
 	} else if (strncmp(cmdline, "start ", 6) == 0) {
@@ -216,7 +221,8 @@ void cons_runcmd(char *cmdline, struct CONSOLE *cons, int *fat, int memtotal)
 	return;
 }
 
-void cmd_mem(struct CONSOLE *cons, int memtotal){
+void cmd_mem(struct CONSOLE *cons, int memtotal)
+{
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
 	char s[60];
 	sprintf(s, "total   %dMB\nfree %dKB\n\n", memtotal / (1024 * 1024), memman_total(memman) / 1024);
@@ -224,7 +230,8 @@ void cmd_mem(struct CONSOLE *cons, int memtotal){
 	return;
 }
 
-void cmd_cls(struct CONSOLE *cons){
+void cmd_cls(struct CONSOLE *cons)
+{
 	int x, y;
 	struct SHEET *sheet = cons->sht;
 	for (y = 28; y < sheet->bysize-9; y++) {
@@ -257,24 +264,6 @@ void cmd_ls(struct CONSOLE *cons){
 				cons_putstr0(cons, s);
 			}
 		}
-	}
-	cons_newline(cons);
-	return;
-}
-
-void cmd_cat(struct CONSOLE *cons, int *fat, char *cmdline){
-	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
-	struct FILEINFO *finfo = file_search(cmdline + 4, (struct FILEINFO *) (ADR_DISKIMG + 0x002600), 224);
-	char *p;
-	if (finfo != 0) {
-		/* 找到文件的情况 */
-		p = (char *) memman_alloc_4k(memman, finfo->size);
-		file_loadfile(finfo->clustno, finfo->size, p, fat, (char *) (ADR_DISKIMG + 0x003e00));
-		cons_putstr1(cons, p, finfo->size);
-		memman_free_4k(memman, (int) p, finfo->size);
-	} else {
-		/* 没有找到文件的情况 */
-		cons_putstr0(cons, "File not found.\n");
 	}
 	cons_newline(cons);
 	return;
@@ -342,6 +331,7 @@ void cmd_ncst(struct CONSOLE *cons, char *cmdline, int memtotal)
 	cons_newline(cons);
 	return;
 }
+
 int cmd_app(struct CONSOLE *cons, int *fat, char *cmdline)
 {
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
@@ -399,6 +389,12 @@ int cmd_app(struct CONSOLE *cons, int *fat, char *cmdline)
 					sheet_free(sht);	/* 关闭 */
 				}
 			}
+			for (i = 0; i < 8; i++) {	/* 将未关闭的文件关闭 */
+				if (task->fhandle[i].buf != 0) {
+					memman_free_4k(memman, (int) task->fhandle[i].buf, task->fhandle[i].size);
+					task->fhandle[i].buf = 0;
+				}
+			}
 			timer_cancelall(&task->fifo);
 			memman_free_4k(memman, (int) q, segsiz);
 		} else {
@@ -425,6 +421,9 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int 
 		/* reg[0] : EDI,   reg[1] : ESI,   reg[2] : EBP,   reg[3] : ESP */
 		/* reg[4] : EBX,   reg[5] : EDX,   reg[6] : ECX,   reg[7] : EAX */
 	int i;
+	struct FILEINFO *finfo;
+	struct FILEHANDLE *fh;
+	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
 
 	if (edx == 1) {
 		cons_putchar(cons, eax & 0xff, 1);
@@ -496,7 +495,7 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int 
 			}
 			i = fifo32_get(&task->fifo);
 			io_sti();
-			if (i <= 1) { /* 光标用定时器 */
+			if (i <= 1  && cons->sht != 0) { /* 光标用定时器 */
 				/* 应用程序运行时不需要光标，故下次显示时位置为1 */
 				timer_init(cons->timer, &task->fifo, 1); /* 下次置1 */
 				timer_settime(cons->timer, 50);
@@ -514,7 +513,7 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int 
 				cons->sht = 0;
 				io_sti();
 			}
-			if (256 <= i ) { /* 键盘数据（通过任务A） */
+			if (i >= 256 ) { /* 键盘数据（通过任务A） */
 				reg[7] = i - 256;
 				return 0;
 			}
@@ -540,6 +539,76 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int 
 			i = io_in8(0x61);
 			io_out8(0x61, (i | 0x03) & 0x0f);
 		}
+		} else if (edx == 21) {
+		for (i = 0; i < 8; i++) {
+			if (task->fhandle[i].buf == 0) {
+				break;
+			}
+		}
+		fh = &task->fhandle[i];
+		reg[7] = 0;
+		if (i < 8) {
+			finfo = file_search((char *) ebx + ds_base,
+					(struct FILEINFO *) (ADR_DISKIMG + 0x002600), 224);
+			if (finfo != 0) {
+				reg[7] = (int) fh;
+				fh->buf = (char *) memman_alloc_4k(memman, finfo->size);
+				fh->size = finfo->size;
+				fh->pos = 0;
+				file_loadfile(finfo->clustno, finfo->size, fh->buf, task->fat, (char *) (ADR_DISKIMG + 0x003e00));
+			}
+		}
+	} else if (edx == 22) {
+		fh = (struct FILEHANDLE *) eax;
+		memman_free_4k(memman, (int) fh->buf, fh->size);
+		fh->buf = 0;
+	} else if (edx == 23) {
+		fh = (struct FILEHANDLE *) eax;
+		if (ecx == 0) {
+			fh->pos = ebx;
+		} else if (ecx == 1) {
+			fh->pos += ebx;
+		} else if (ecx == 2) {
+			fh->pos = fh->size + ebx;
+		}
+		if (fh->pos < 0) {
+			fh->pos = 0;
+		}
+		if (fh->pos > fh->size) {
+			fh->pos = fh->size;
+		}
+	} else if (edx == 24) {
+		fh = (struct FILEHANDLE *) eax;
+		if (ecx == 0) {
+			reg[7] = fh->size;
+		} else if (ecx == 1) {
+			reg[7] = fh->pos;
+		} else if (ecx == 2) {
+			reg[7] = fh->pos - fh->size;
+		}
+	} else if (edx == 25) {
+		fh = (struct FILEHANDLE *) eax;
+		for (i = 0; i < ecx; i++) {
+			if (fh->pos == fh->size) {
+				break;
+			}
+			*((char *) ebx + ds_base + i) = fh->buf[fh->pos];
+			fh->pos++;
+		}
+		reg[7] = i;
+	} else if (edx == 26) {
+		i = 0;
+		for (;;) {
+			*((char *) ebx + ds_base + i) =  task->cmdline[i];
+			if (task->cmdline[i] == 0) {
+				break;
+			}
+			if (i >= ecx) {
+				break;
+			}
+			i++;
+		}
+		reg[7] = i;
 	}
 	return 0;
 }
