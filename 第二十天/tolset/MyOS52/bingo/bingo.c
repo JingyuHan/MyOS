@@ -27,7 +27,7 @@ void HariMain(void)
 	api_putstrwin(win, 6 , 27 + 2 * 16, 7, 10, note );
 	sprintf(note,"▲：炸弹-后退5格\0");
 	api_putstrwin(win, 6 , 27 + 3 * 16, 7, 18, note );
-	sprintf(note,"◆：钻石-后退5格\0");
+	sprintf(note,"◆：钻石-前进5格\0");
 	api_putstrwin(win, 6 , 27 + 4 * 16, 7, 18, note );
 	sprintf(note,"★：魔法-互换位置\0");
 	api_putstrwin(win, 6 , 27 + 5 * 16, 7, 18, note );
