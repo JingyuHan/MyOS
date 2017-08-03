@@ -175,7 +175,7 @@ src_only_full :
 	$(MAKE) -C bball		src_only
 	$(MAKE) -C invader		src_only
 	$(MAKE) -C calc			src_only
-	$(MAKE) -C tview		clean
+	$(MAKE) -C tview		src_only
 	$(MAKE) -C mmlplay		src_only
 	$(MAKE) -C gview		src_only
 	-$(DEL) MyOS.img
